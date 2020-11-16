@@ -52,6 +52,17 @@ class Q_agent(EV3Brick):
             if stopwatch.time() > 10000:
                 self.ev3.light.off()
                 return 0
+
+    def get_double_press(self): # used to indicate a user has finished their time with CHORE bot
+        stopwatch = StopWatch()
+        stopwatch.reset()
+        self.ev3.light.on(Color.ORANGE)
+        while True:
+            if self.touch_left.pressed() and self.touch_right.pressed():
+                return True
+            if stopwatch.time() > 3000:
+                self.ev3.light.off()
+                return False
     
     def say(self, words, color=Color.RED):
         self.ev3.light.on(color)
@@ -61,19 +72,25 @@ class Q_agent(EV3Brick):
     def beep(self):
         self.ev3.speaker.beep()
 
-    def get_color(self):
+    def get_color(self, time=1000):
         stopwatch = StopWatch()
         stopwatch.reset()
+        self.ev3.light.on(Color.ORANGE)
         while True:
             if self.color_sensor.color() == Color.BLUE:
+                self.ev3.light.off()
                 return Color.BLUE
             if self.color_sensor.color() == Color.GREEN:
+                self.ev3.light.off()
                 return  Color.GREEN
             if self.color_sensor.color() == Color.YELLOW:
+                self.ev3.light.off()
                 return Color.YELLOW
             if self.color_sensor.color() == Color.RED:
+                self.ev3.light.off()
                 return Color.RED
-            if stopwatch.time() > 1000:
+            if stopwatch.time() > time:
+                self.ev3.light.off()
                 return None
 
     def drive_time(self, dist=100, time=1, ang=0):
@@ -93,6 +110,16 @@ class Q_agent(EV3Brick):
 
     def spin(self, angle):
         self.drive.turn(angle)
+
+    def unload(self): # unload payload
+        self.drive.stop()
+        turn_rate = self.drive.settings()[2]
+        turn_acceleration = self.drive.settings()[3]
+        self.drive.settings(turn_rate=300, turn_acceleration=2000)
+        self.drive.turn(25)
+        self.drive.turn(-25)
+        self.drive.stop()
+        self.drive.settings(turn_rate=turn_rate, turn_acceleration=turn_acceleration)
 
     def driveTillObst(self, speed):
         while True:

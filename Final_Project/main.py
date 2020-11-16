@@ -16,6 +16,8 @@ from pybricks.tools import DataLog, StopWatch, wait
 
 import Q_agent, Q_table, User, PolicyShaping
 
+import csv
+
 # This program requires LEGO EV3 MicroPython v2.0 or higher.
 # Click "Open user guide" on the EV3 extension tab for more information.
 
@@ -48,31 +50,41 @@ env = [
     [0,0,0,0],
     [0,0,0,0],
     [0,0,0,0],
-    [0,0,0,5]
+    [5,0,0,5]
 ]
 
 # Initialize CHORE bot
-fam = Q_agent.Q_agent(ev3, drive, obstacle_sensor, color_sensor, touch_left, touch_right, 4, 4, env)
+fam = Q_agent.Q_agent(ev3, drive, obstacle_sensor, color_sensor, touch_left, touch_right, 4, 4, env, goal_states=[[3,0], [3,3]])
 
 state_size = len(env) * len(env[0])
 action_size = 4
 qtable = Q_table.Q_table(state_size, action_size)
 
-# Initialize user:
-child = User.User(Color.RED, state_size, action_size, 0) 
+# Initialize users:
+child = User.User(Color.RED, state_size, action_size, 1, "child") 
+parent = User.User(Color.GREEN, state_size, action_size, 3, "parent") 
+no_user = User.User(Color.BLUE, state_size, action_size, 1)
+
+"""Type of PS feedback table combine:
+Version 0 = naive
+Version 1 = weighted combine
+Version 2 = sign combine
+"""
+ps_version = 0
+
 
 episodes = 20
-max_moves = 30 # Max agent moves per episode
+max_moves = 23 # Max agent moves per episode
 
 # Q-learning parameters
-learning = 0.1
+learning = 0.3
 discount = .9
 exploration_rate = 1
-min_exploration = .001
-exploration_decay = .1
+min_exploration = .0001
+exploration_decay = .4
 
 # policy shaping parameters:
-confidence = .9  # confidence that feedback is optimal
+confidence = .1  # confidence that feedback is optimal
 likelihood = .5  # likelihood feedback is provided
 const = 0.3  # constant used in probability of action equation
 
@@ -80,13 +92,48 @@ rewards = []
 num_moves = []
 
 
-data = DataLog('Episode #', 'Reward', "Time", "Num_feedbacks", "agent_pos", "is_done", name="ep_log", timestamp=True, extension='csv', append=False)
+data = DataLog('Episode #', 'Reward', "Time", "Num_feedbacks", "agent_pos", "is_done", \
+                "username", name="ep_log", timestamp=True, extension='csv', append=False)
+
+q_table_data = DataLog(name = "q_table", extension='csv', append=False)
+child_fdbktable_data = DataLog(name = "child_table", extension='csv', append=False)
+parent_fdbktable_data = DataLog(name = "parent_table", extension='csv', append=False)
 
 episode_stopwatch = StopWatch()
 episode_stopwatch.reset()
 
+user_color = None
+user = None
+fam.say("Please enter user")
+user_color = fam.get_color(3000)
+if user_color is Color.RED:
+    fam.say("Hello child")
+    user = child
+elif user_color is Color.GREEN:
+    fam.say("Hello parent")
+    user = parent
+elif user_color is Color.BLUE or user_color is None:
+    user = no_user
+
+first_session = True
+
 for episode in range(episodes):
-    wait(10000)
+    if user is not no_user:
+        wait(5000)
+    elif user is no_user:
+        user_color = fam.get_color(8000)
+        if user_color is Color.RED:
+            fam.say("Hello child")
+            user = child
+        elif user_color is Color.GREEN:
+            fam.say("Hello parent")
+            exploration_rate = .3
+            env[1][0] = 0
+            env[2][0] = 0
+            env[3][0] = 5
+            user = parent
+        elif user_color is Color.BLUE or user_color is None:
+            user = no_user
     episode_stopwatch.reset
     fam.beep()
     state = fam.reset()
@@ -94,39 +141,42 @@ for episode in range(episodes):
     curr_reward = 0
     num_moves.append(0)
     num_feedbacks = 0 # Number of times the us gave feedback during the episode
-
     for move in range(max_moves):
         if random.random() > exploration_rate:
-            action = PolicyShaping.get_shaped_action(qtable.qtable, child.get_feedback_table(), state, confidence)
+            action = PolicyShaping.get_shaped_action(qtable.qtable, user.get_feedback_table(), state, confidence)
         else:
-            action = random.randint(0, action_size-1)
-
-        num_moves[episode] += 1
+            action = random.randint(0, action_size-1) 
         next_state, reward, is_done = fam.step(action)
         if state != next_state:
-            feedback = fam.get_feedback()
-            print(feedback)
-            if feedback != 0:
-                num_feedbacks += 1
-            wait(3000)
-            child.update_feedback_table(state, action, feedback)
-            if reward == 0 and done is False:
+            num_moves[episode] += 1
+            if user is not no_user:
+                feedback = fam.get_feedback()
+                print(feedback)
+                if feedback != 0:
+                    num_feedbacks += 1
+                wait(3000)
+                user.update_feedback_table(state, action, feedback)
+            if reward == 0 and is_done is False:
                 reward = -1 # penalty for each move
         else: 
-            if reward == 0 and done is False:
+            print(move)
+            move -= 1 # does not count as a move
+            print(move)
+            if reward == 0 and is_done is False:
                 reward = -3 # penalty for trying to move out of bounds
         
         ep_time = episode_stopwatch.time()
-        data.log(episode, curr_reward, ep_time, num_feedbacks, fam.agent_pos, is_done)
+        data.log(episode, curr_reward, ep_time, num_feedbacks, fam.agent_pos, is_done, user.username)
         print(state, action)
         qtable.qtable[state][action] = (1 - learning) * qtable.qtable[state][action] + learning * \
                                         (reward + discount * qtable.maxq(next_state))
         
         state = next_state
         curr_reward += reward
-
+        print(qtable.qtable)
         if is_done:
-            fam.say("Hooray!")
+            fam.unload()
+            fam.say("Hooray!", color=Color.GREEN)
             break
     if not is_done:
         fam.say("Let's try again.")
@@ -136,6 +186,35 @@ for episode in range(episodes):
     rewards.append(curr_reward)
     # Exponential decay of exploration rate:
     exploration_rate = min_exploration + (1 - min_exploration) * math.exp(-exploration_decay * episode)
+
+    user_session_is_done = fam.get_double_press() # Check if user is finished
+    if not user_session_is_done:
+        continue
+    else:
+        fam.say("Goodbye")
+        wait(5000)
+        user_feedback = user.get_feedback_table()
+        user_status = user.status
+        user = no_user
+        if first_session is True:
+            child_fdbktable_data.log(user_feedback)
+            user.set_feedback_table(user_feedback)
+            first_session = False
+        else:
+            parent_fdbktable_data.log(user_feedback)
+            q_table_data.log(qtable.qtable)
+            if ps_version == 0:
+                user.set_feedback_table(PolicyShaping.naive_combine(user.get_feedback_table(), user_feedback))
+                combined_fdbktable_data_1 = DataLog(name = "naive_combine", extension='csv', append=False)
+            elif ps_version == 1:
+                user.set_feedback_table(PolicyShaping.weighted_combine(user.get_feedback_table(), user_feedback, user_status))
+                combined_fdbktable_data_2 = DataLog(name = "weight_combine", extension='csv', append=False)
+            elif ps_version == 2:
+                user.set_feedback_table(PolicyShaping.sign_combine(child_table=user.get_feedback_table(), parent_table=user_feedback))
+                combined_fdbktable_data_2 = DataLog(name = "sign_combine", extension='csv', append=False)
+        print(user.get_feedback_table())
+
+    
 
 
 """
