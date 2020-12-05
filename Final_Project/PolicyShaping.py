@@ -11,6 +11,8 @@ def get_action(probs):
 
 def softmax(values, temp=0.3):
     values_denom = sum([math.exp(value/temp) for value in values])
+    if values_denom < .001:
+        values_denom = .001
     probs = []
     for value in values:
         probs.append(math.exp(value/temp)/values_denom)
@@ -18,8 +20,15 @@ def softmax(values, temp=0.3):
 
 def ps_probs(feedback_table, confidence):
     fdbk_probs = []
-    for action in feedback_table:
-        fdbk_probs.append((confidence**action)/(confidence**action + (1-confidence)**action))
+    for i, action in enumerate(feedback_table):
+        # sides of the binomial probability calculation
+        left_side = confidence**action
+        right_side_power = 0
+        for j, other_actions in enumerate(feedback_table):
+            if i != j:
+                right_side_power += other_actions
+        right_side = (1-confidence)**right_side_power
+        fdbk_probs.append(left_side*right_side)
     return fdbk_probs
 
 def get_shaped_action(q_table, feedback_table, state, confidence=0.8):

@@ -252,6 +252,11 @@ class Q_agent(EV3Brick):
         self.orientation = 'f'
         return 0 
 
+    def alt_reset(self):
+        self.agent_pos = [0,3]
+        self.orientation = 'f'
+        return 3 
+
     def get_state_from_pos(self):
         pos = (self.agent_pos[0], self.agent_pos[1])
         return self.env_state[pos]
