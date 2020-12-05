@@ -1,0 +1,13 @@
+Episode #, Reward, Time, Num_feedbacks, agent_pos, is_done, username
+0, 0, 10081, 0, [1, 0], False, None
+0, -1, 12080, 0, [2, 0], False, None
+0, -2, 14082, 0, [3, 0], True, None
+0, 3, 18204, 0, [3, 0], True
+1, 0, 13116, 0, [1, 0], False, None
+1, -1, 15145, 0, [2, 0], False, None
+1, -2, 17146, 0, [3, 0], True, None
+1, 3, 20403, 0, [3, 0], True
+2, 0, 13077, 0, [1, 0], False, None
+2, -1, 15077, 0, [2, 0], False, None
+2, -2, 17118, 0, [3, 0], True, None
+2, 3, 20285, 0, [3, 0], True
